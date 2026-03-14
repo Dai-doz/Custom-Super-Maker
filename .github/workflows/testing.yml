@@ -12,6 +12,7 @@ on:
         options:
         - 'none (Use Custom URL below)'
         - 'Samsung A04s (64GB)'
+        - 'Samsung A12s A127F'
         - 'Samsung A15 (128/256GB)'
       stock_firmware_url:
         description: 'Base: URL (If preset is none)'
@@ -119,6 +120,8 @@ jobs:
         echo "==> Downloading Base Firmware..."
         if [[ "$PRESET" == "Samsung A04s (64GB)" ]]; then
           gdown --quiet --output stock_firmware.zip '1C9GtYTn1EZ4sQN7qfJeWN6gxDj_WbgY-'
+        elif [[ "$PRESET" == "Samsung A12s A127F" ]]; then
+          gdown --quiet --output stock_firmware.zip '1J38ATKSjoVN2yqVc_GF6JD9GKaPuhK2g'
         elif [[ "$PRESET" == "Samsung A15 (128/256GB)" ]]; then
           gdown --quiet --output stock_firmware.zip '12FoeBkPDHddj4lzd-T6pjHRQ8Ey3c2U8'
         elif [ -n "$URL" ]; then
