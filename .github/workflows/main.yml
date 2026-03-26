@@ -11,6 +11,7 @@ on:
         options:
         - 'none (Use Custom URL below)'
         - 'Samsung A04s (64GB)'
+        - 'Samsung A12s A127F'
         - 'Samsung A15 (128/256GB)'
       stock_firmware_url:
         description: 'Custom Stock Firmware URL (Required if preset is none)'
@@ -79,42 +80,36 @@ jobs:
         chmod +x ./repacksuper.sh
         mkdir -p work
 
-    - name: Download Stock Firmware
+    - name: Download Base Firmware
       run: |
         cd work
         PRESET="${{ github.event.inputs.device_preset }}"
-        
+        URL="${{ github.event.inputs.stock_firmware_url }}"
+
+        echo "==> Downloading Base Firmware..."
         if [[ "$PRESET" == "Samsung A04s (64GB)" ]]; then
-          echo "==> Downloading Samsung A04s Firmware..."
-          gdown --output stock_firmware.zip '1C9GtYTn1EZ4sQN7qfJeWN6gxDj_WbgY-'
-          
+          gdown --quiet --output stock_firmware.zip '1C9GtYTn1EZ4sQN7qfJeWN6gxDj_WbgY-'
+        elif [[ "$PRESET" == "Samsung A12s A127F" ]]; then
+          gdown --quiet --output stock_firmware.zip '1J38ATKSjoVN2yqVc_GF6JD9GKaPuhK2g'
         elif [[ "$PRESET" == "Samsung A15 (128/256GB)" ]]; then
-          echo "==> Downloading Samsung A15 Firmware..."
-          gdown --output stock_firmware.zip '12FoeBkPDHddj4lzd-T6pjHRQ8Ey3c2U8'
-          
+          gdown --quiet --output stock_firmware.zip '12FoeBkPDHddj4lzd-T6pjHRQ8Ey3c2U8'
+        elif [ -n "$URL" ]; then
+          if [[ $URL == *"mega.nz"* ]]; then megadl -o stock_firmware.zip "$URL"; else wget -q --content-disposition -O stock_firmware.zip "$URL"; fi
         else
-          echo "==> Using Custom URL..."
-          FIRMWARE_URL="${{ github.event.inputs.stock_firmware_url }}"
-          if [ -z "$FIRMWARE_URL" ]; then echo "✗ Error: No preset selected and no URL provided." && exit 1; fi
-          
-          if [[ $FIRMWARE_URL == *"mega.nz"* ]]; then 
-            megadl -o stock_firmware.zip "$FIRMWARE_URL"
-          else 
-            wget --content-disposition -O stock_firmware.zip "$FIRMWARE_URL"
-          fi
+          echo "::error::No device preset or URL selected." && exit 1
         fi
-        
+
         if [ ! -s "stock_firmware.zip" ]; then echo "✗ Error: Firmware download failed." && exit 1; fi
-        
+
         echo "==> Extracting AP file..."
         AP_FILENAME=$(unzip -l "stock_firmware.zip" | grep -i -o -E "AP_.*\.tar\.md5" | head -n 1)
         unzip -o -j "stock_firmware.zip" "$AP_FILENAME"
         rm "stock_firmware.zip"
-        
+
         echo "==> Extracting super.img.lz4..."
         tar -xvf "$AP_FILENAME" --wildcards '*super.img*.lz4'
         rm "$AP_FILENAME"
-        
+
         echo "==> Decompressing LZ4..."
         SUPER_LZ4=$(ls *super.img*.lz4 | head -n 1)
         lz4 -d "$SUPER_LZ4" stock_super_sparse.img
@@ -126,12 +121,12 @@ jobs:
         echo "==> Downloading Custom ROM..."
         ROM_URL="${{ github.event.inputs.custom_system_url }}"
         wget -O custom_rom_package "$ROM_URL"
-        
+
         CLEAN_URL="${ROM_URL%%\?*}"
         ROM_NAME=$(basename "$CLEAN_URL")
         echo "Detected ROM Name: $ROM_NAME"
         echo "ROM_NAME=$ROM_NAME" >> $GITHUB_ENV
-        
+
         FILE_DESC=$(file -b custom_rom_package)
         echo "Detected File Type: $FILE_DESC"
 
@@ -139,37 +134,37 @@ jobs:
             mv custom_rom_package c.img.xz
             unxz c.img.xz
             mv c.img custom_system.img
-            
+
         elif [[ "$FILE_DESC" == *"Zip archive"* ]]; then
             unzip -o custom_rom_package
-            
+
         elif [[ "$FILE_DESC" == *"7-zip archive"* ]]; then
             7z x custom_rom_package
-            
+
         elif [[ "$FILE_DESC" == *"gzip compressed"* ]]; then
             mv custom_rom_package c.img.gz
             gzip -d c.img.gz
             mv c.img custom_system.img
-            
+
         else
             echo "Assuming raw image..."
             mv custom_rom_package custom_system.img
         fi
-        
+
         if [ ! -f "custom_system.img" ]; then
             echo "==> Searching for extracted .img file..."
             IMG_FILE=$(find . -type f -name "*.img" ! -name "stock_super_sparse.img" -printf "%s\t%p\n" | sort -n | tail -1 | cut -f2-)
-            
+
             if [ -z "$IMG_FILE" ]; then
                 echo "✗ Error: No .img file found after extraction!"
                 ls -R
                 exit 1
             fi
-            
+
             echo "==> Found image: $IMG_FILE"
             mv "$IMG_FILE" custom_system.img
         fi
-        
+
         echo "==> Custom system image prepared: custom_system.img"
 
     - name: Download ASRControl APK
@@ -195,9 +190,9 @@ jobs:
       run: |
         cd work
         echo "==> Starting Docker for System Modification..."
-        
+
         wget -O pfetch "https://raw.githubusercontent.com/dylanaraps/pfetch/refs/heads/master/pfetch"
-        
+
         docker run --rm --privileged \
           -v "$(pwd):/work" \
           -e ROM_NAME="${{ env.ROM_NAME }}" \
@@ -206,21 +201,21 @@ jobs:
             set -e
             apt-get update -qq && apt-get install -y -qq e2fsprogs util-linux file erofs-utils android-sdk-libsparse-utils
             cd /work
-            
+
             echo "==> Using erofs-utils version:"
             fsck.erofs -V
-            
+
             FS_TYPE=$(blkid -o value -s TYPE custom_system.img 2>/dev/null || echo "unknown")
             if [ "$FS_TYPE" = "unknown" ]; then
                 if file custom_system.img | grep -q "EROFS"; then FS_TYPE="erofs"; fi
             fi
             echo "==> Filesystem detected: $FS_TYPE"
-            
+
             inject_files() {
                 local MOUNT_DIR=$1
                 local TARGET_DIR="$MOUNT_DIR/system/app"
                 if [ ! -d "$TARGET_DIR" ]; then TARGET_DIR="$MOUNT_DIR/app"; fi
-                
+
                 if [ -f "ASRControl.apk" ]; then
                     mkdir -p "$TARGET_DIR/ASRControl"
                     cp ASRControl.apk "$TARGET_DIR/ASRControl/ASRControl.apk"
@@ -228,17 +223,17 @@ jobs:
                     chmod 644 "$TARGET_DIR/ASRControl/ASRControl.apk"
                     echo "--> APK Injected."
                 fi
-                
+
                 local BIN_DIR="$MOUNT_DIR/system/bin"
                 if [ ! -d "$BIN_DIR" ]; then BIN_DIR="$MOUNT_DIR/bin"; fi
-                
+
                 cp pfetch "$BIN_DIR/pfetch"
                 chmod 755 "$BIN_DIR/pfetch"
                 echo "--> Binary Injection Complete."
 
                 local PROP_FILE="$MOUNT_DIR/system/build.prop"
                 if [ ! -f "$PROP_FILE" ]; then PROP_FILE="$MOUNT_DIR/build.prop"; fi
-                
+
                 if [ -f "$PROP_FILE" ]; then
                     sed -i "s|ro\.build\.id=.*|ro.build.display.id=Built.By.Minh2077.Script|g" "$PROP_FILE"
                     if ! grep -q "ro.repack.author" "$PROP_FILE"; then
@@ -257,18 +252,18 @@ jobs:
               echo "==> Handling EXT4..."
               echo "--> Extending image size..."
               truncate -s +2G custom_system.img
-              
+
               echo "--> Resizing filesystem..."
               resize2fs -f custom_system.img
-              
+
               echo "--> Unsharing blocks..."
               e2fsck -y -E unshare_blocks custom_system.img || [ $? -le 1 ]
-              
+
               mkdir -p /mnt/sys
               mount -o loop custom_system.img /mnt/sys
               inject_files "/mnt/sys"
               umount /mnt/sys
-              
+
               echo "--> Shrinking image..."
               e2fsck -f -y custom_system.img || [ $? -le 1 ]
               resize2fs -M custom_system.img
@@ -290,7 +285,7 @@ jobs:
         if [ "${{ github.event.inputs.empty_product }}" == "true" ]; then FLAGS="$FLAGS -e"; fi
         if [ "${{ github.event.inputs.empty_system_ext }}" == "true" ]; then FLAGS="$FLAGS -x"; fi
         if [ "${{ github.event.inputs.writable }}" == "true" ]; then FLAGS="$FLAGS -w"; fi
-        
+
         echo "Running with flags: $FLAGS"
         ./repacksuper.sh $FLAGS work/stock_super_sparse.img work/custom_system.img work/repacked_super.img
 
