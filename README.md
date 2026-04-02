@@ -79,6 +79,7 @@ Don't know where to get the `AP` link? Follow the visual guide in the `pic/` fol
 *   **"No space left on device"**: GitHub runners have ~14GB of usable space. If your firmware is massive, the build might fail. 
 *   **Bootloops**: Ensure you formatted data in recovery. Also, verify your ROM is the correct architecture (usually `arm64-ab`).
 *   **Odin Errors**: Ensure you are using the latest version of Odin and your Samsung drivers are up to date.
+*   **Google drive link**: This github action DOES NOT support google drive file download, to check if it support or not, run wget "your link here", if it return the real file (or aka the .img) then that link is good. 
 
 ---
 
