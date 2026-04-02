@@ -287,7 +287,7 @@ jobs:
         if [ "${{ github.event.inputs.writable }}" == "true" ]; then FLAGS="$FLAGS -w"; fi
 
         echo "Running with flags: $FLAGS"
-        sudo ./repacksuper_lite.sh $FLAGS work/stock_super_sparse.img work/custom_system.img work/repacked_super.img
+        ./repacksuper.sh $FLAGS work/stock_super_sparse.img work/custom_system.img work/repacked_super.img
 
     - name: Create Tarball
       id: package
